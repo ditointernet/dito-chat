@@ -1,0 +1,216 @@
+defaults:
+  environment: &env
+    PROJECT_NAME: core
+    DOCKER_FILE_NAME: ./Dockerfile.prod
+    OAK_WORK_DIR: /go/src/github.com/tracksale/oak
+    TF_WORK_DIR: ~/a2-core/terraform
+    CORE_DATABASE_HOST: localhost
+    CORE_DATABASE_NAME: postgres
+    CORE_DATABASE_USER: postgres
+    CORE_DATABASE_PASSWORD: "123456"
+    CORE_DATABASE_SSLMODE: disable
+
+version: 2
+jobs:
+  build-image:
+    docker:
+      - image: circleci/golang:1.11
+    environment:
+      <<: *env
+    working_directory: /go/src/github.com/tracksale/a2-core
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 18.06.0-ce
+          docker_layer_caching: true
+
+      - run: git clone git@github.com:Tracksale/oak.git $OAK_WORK_DIR    
+      - run: docker build -t $PROJECT_NAME:latest -f $DOCKER_FILE_NAME ../
+      - run: docker save -o $PROJECT_NAME-latest.tar $PROJECT_NAME:latest
+      - run: go get -v -t -d ./...
+      - run: CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o core .
+
+      - persist_to_workspace:
+              root: .
+              paths:
+                - ./
+  test-image:
+    docker:
+      - image: circleci/golang:1.11
+      - image: circleci/postgres:11-alpine
+        environment:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: "123456"
+    environment:
+      <<: *env
+    working_directory: /go/src/github.com/tracksale/a2-core
+    steps:
+
+      - attach_workspace:
+          at: .
+
+      - setup_remote_docker:
+          version: 18.06.0-ce
+          docker_layer_caching: true
+
+      - run: dockerize -wait tcp://127.0.0.1:5432 -timeout 120s
+      - run: ./core -down -up
+
+      - run: docker load -i $PROJECT_NAME-latest.tar
+      - run:
+          name: Test image
+          command: |
+            docker run -d -p 8000:8000 \
+                          -e CORE_DATABASE_HOST=${CORE_DATABASE_HOST} \
+                          -e CORE_DATABASE_NAME=${CORE_DATABASE_NAME} \
+                          -e CORE_DATABASE_USER=${CORE_DATABASE_USER} \
+                          -e CORE_DATABASE_PASSWORD=${CORE_DATABASE_PASSWORD} \
+                          -e CORE_DATABASE_SSLMODE=${CORE_DATABASE_SSLMODE} \
+                          -e PARSER_HOST="http://parser:8000" \
+                          --name $PROJECT_NAME $PROJECT_NAME:latest         
+            sleep 10
+            # docker run --network container:$PROJECT_NAME appropriate/curl --retry 10 --retry-connrefused -v -I -X GET http://localhost:8000/health | grep "200 OK"
+
+  push-image:
+    docker:
+      - image: circleci/python:2.7-jessie
+    environment:
+      <<: *env
+    working_directory: ~/a2-core
+    steps:
+
+      - attach_workspace:
+          at: .
+
+      - run: sudo pip install awscli
+      - run: 
+          name: Push Image to S3
+          command: |
+
+            aws s3 cp s3://ts-a2-terraform/files/ $TF_WORK_DIR --recursive
+
+            if [ -n "$CIRCLE_TAG" ]
+            then
+              echo 'export PROJECT_VERSION=$CIRCLE_TAG.$CIRCLE_BUILD_NUM' >> $BASH_ENV
+            else
+              echo 'export PROJECT_VERSION=v2.0.0.$CIRCLE_BUILD_NUM' >> $BASH_ENV
+            fi
+
+            source $BASH_ENV
+
+            sed "s+latest+${PROJECT_VERSION}+g" $TF_WORK_DIR/deploy/$PROJECT_NAME/version.tfvars > $TF_WORK_DIR/deploy/$PROJECT_NAME/version.auto.tfvars
+
+            aws s3 cp ./$PROJECT_NAME-latest.tar s3://ts-a2-registry/images/$PROJECT_NAME/$PROJECT_NAME-latest.tar
+            aws s3 cp s3://ts-a2-registry/images/$PROJECT_NAME/$PROJECT_NAME-latest.tar s3://ts-a2-registry/images/$PROJECT_NAME/$PROJECT_NAME-$PROJECT_VERSION.tar
+
+      - persist_to_workspace:
+              root: .
+              paths:
+                - ./
+  deploy:
+    docker:
+      - image: hashicorp/terraform
+    environment:
+      <<: *env
+    working_directory: ~/a2-content
+    steps:
+
+      - attach_workspace:
+          at: .
+
+      - run:
+          name: Init to Deploy
+          command: |
+            cd $TF_WORK_DIR/deploy/$PROJECT_NAME
+            terraform init -reconfigure -var "cluster=$DEFAULT_CLUSTER_NAME" -var "project_name=$PROJECT_NAME" -input=false -backend-config="key=states/$DEFAULT_CLUSTER_NAME/$PROJECT_NAME.tfstate"
+      - run:
+          name: Plan to Deploy
+          command: |
+              cd $TF_WORK_DIR/deploy/$PROJECT_NAME
+              terraform plan -var "cluster=$DEFAULT_CLUSTER_NAME" -var "project_name=$PROJECT_NAME" -out=$DEFAULT_CLUSTER_NAME.plan 
+      - run:
+          name: Deploy Configuration
+          command: |
+              cd $TF_WORK_DIR/deploy/$PROJECT_NAME
+              terraform apply -auto-approve $DEFAULT_CLUSTER_NAME.plan
+              
+  test-app:
+    docker:
+      - image: circleci/golang:1.11
+      - image: circleci/postgres:11-alpine
+        environment:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: "123456"
+    environment:
+      <<: *env
+    working_directory: /go/src/github.com/tracksale/a2-core
+    steps:
+
+      - checkout
+      
+      - run: git clone git@github.com:Tracksale/oak.git $OAK_WORK_DIR
+      - run: dockerize -wait tcp://127.0.0.1:5432 -timeout 120s
+      - run: go get -v -t -d ./...
+      - run: go run main.go -down -up
+      - run: go get github.com/mattn/goveralls
+      - run:
+          name: Go Test Coverage
+          command: go test -race -coverprofile=coverage.txt -covermode=atomic ./... 
+          environment:
+            CORE_DATABASE_HOST: localhost
+      - run: bash <(curl -s https://codecov.io/bash) -t 981b7ee9-57ee-40a6-98bc-fdfc3b594224
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - test-app:
+          filters: 
+            tags:
+              only: /.*/
+      - build-image:
+          context: a2
+          requires:
+            - test-app
+          filters:
+            branches:
+              only: UpgradeDockerFileProd
+              ignore: /.*/
+            tags:
+              only:
+                - /^v[0-9]+(\.[0-9]+)*/ # v2.0.0.0
+      - test-image:
+          context: a2
+          requires:
+            - build-image
+          filters:
+            branches:
+              only: UpgradeDockerFileProd
+              ignore: /.*/
+            tags:
+              only:
+                - /^v[0-9]+(\.[0-9]+)*/ # v2.0.0.0
+      - push-image:
+          context: a2
+          requires:
+            - test-image
+          filters:
+            branches:
+              only: UpgradeDockerFileProd
+              ignore: /.*/
+            tags:
+              only:
+                - /^v[0-9]+(\.[0-9]+)*/ # v2.0.0.0
+      - deploy:
+          context: a2
+          requires:
+            - push-image
+          filters:
+            branches:
+              only: UpgradeDockerFileProd
+              ignore: /.*/
+            tags:
+              only:
+                - /^v[0-9]+(\.[0-9]+)*/ # v2.0.0.0

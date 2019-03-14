@@ -1,0 +1,33 @@
+settings:
+  legacy:
+    force: false
+    interval: 0s
+schema:
+- name: dito-backend
+  path: .
+  commands:
+    generate:         # go generate
+      status: true
+    install:          # go install
+      status: true
+    vet:              # go vet
+      status: false
+    test:             # go test
+      status: false
+    fmt:              # go fmt
+      status: true
+    run:              # go run
+      status: true
+  watcher:
+    extensions:
+    - go
+    paths:
+    - /
+    ignored_paths:
+    - .git
+    - .realize
+    - vendor
+    scripts:
+    - type: before
+      command: go get -v -t ./...
+      output: true

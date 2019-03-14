@@ -1,0 +1,12 @@
+FROM node:10-alpine
+
+ENV NODE_ENV=production
+
+WORKDIR /dito/frontend
+
+COPY . .
+
+RUN npm install -g serve
+RUN yarn install && yarn build
+
+CMD echo "Starting Web... " && serve -s build -p 3000

@@ -1,0 +1,33 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  name: dito-frontend
+  labels:
+    app.kubernetes.io/version: "v0.0.1"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        
+      maxUnavailable: 0
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: dito
+        tier: frontend
+    spec:
+      containers:
+      - image: dito-frontend:latest
+        imagePullPolicy: Always
+        name: dito-frontend
+        ports:
+        - containerPort: 3000
+        resources: {}
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: dito-registry
+status: {}

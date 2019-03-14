@@ -1,0 +1,38 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  name: dito-backend
+  labels:
+    app.kubernetes.io/version: "v0.0.1"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        
+      maxUnavailable: 0
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: dito
+        tier: backend
+    spec:
+      containers:
+      - env:
+        - name: ALLOWED_ORIGIN
+          value: "http://$(FRONTEND_SERVICE_HOST):3000"
+        - name: REDIS_ADDR
+          value: "$(REDIS_SERVICE_HOST):6379"
+        image: dito-backend:latest
+        imagePullPolicy: Always
+        name: dito-backend
+        ports:
+        - containerPort: 3000
+        resources: {}
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: dito-registry
+status: {}

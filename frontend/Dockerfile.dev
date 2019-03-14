@@ -1,0 +1,6 @@
+FROM node:10-alpine
+
+WORKDIR /dito/frontend
+
+CMD yarn install && yarn start
+
