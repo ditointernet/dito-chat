@@ -3,19 +3,21 @@ settings:
     force: false
     interval: 0s
 schema:
-- name: dito-backend
+- name: backend
   path: .
   commands:
     generate:         # go generate
-      status: true
+      status: false
     install:          # go install
-      status: true
+      status: false
     vet:              # go vet
       status: false
     test:             # go test
       status: false
     fmt:              # go fmt
       status: true
+    build:            # go build
+      status: true 
     run:              # go run
       status: true
   watcher:

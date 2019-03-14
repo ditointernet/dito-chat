@@ -8,6 +8,7 @@ services:
       - 6379:6379
   backend:
     image: dito-backend
+    restart: always
     build:
       context: ./backend/
       dockerfile: Dockerfile.dev
@@ -16,10 +17,17 @@ services:
       REDIS_ADDR: "redis:6379"
     ports:
         - 8080:8080
+    depends_on:
+      - redis
+    volumes:
+      - "./backend:/go/src/dito/backend"
   frontend:
     image: dito-frontend
+    restart: always
     build:
       context: ./frontend/
       dockerfile: Dockerfile.dev
     ports:
         - 3000:3000
+    volumes:
+      - "./frontend:/dito/frontend"

@@ -1,0 +1,72 @@
+#!/bin/bash
+
+clear
+echo -e "\e[1;36m################################################################################"
+echo "########                   Dito Script Reset Docker                     ########"
+echo -e "################################################################################\e[0m"
+echo -e "\e[0;32m[                                                                              ]"
+echo -e "[================| \e[1;33mATTENTION!!!\e[0;32m                                                ]"
+echo  "[                                                                              ]"
+echo "[ This script it'll delete all containers, images and volumes of this machine. ]"
+echo -e "[______________________________________________________________________________]\e[0m"
+echo
+echo -n "Do would you like to continue it? [y|N]: "
+read OPT_CONFIRM
+
+if [ "$OPT_CONFIRM" != "y" ] && [ "$OPT_CONFIRM" != "Y" ]
+then
+
+    echo -e "\e[0;31m"
+    echo "The action was cancelled"
+    echo
+    echo "Then End"
+    echo -e "\e[0m"
+	exit 0;
+
+fi
+
+if [ "$1" == "--all" ] || [ "$1" == "-a" ] || [ "$1" == "-A" ]
+then
+
+    echo "############### Removing All Containers"
+
+    echo "############### Stopping Containers"
+    docker stop $(docker ps -a -q)
+
+    echo "############### Remove Containers"
+    docker rm $(docker ps -a -q) -f 
+
+    echo "############### Remove Images Containers"
+    docker rmi $(docker images -q) -f
+
+    echo "############### Remove Volumes Containers"
+    docker volume rm $(docker volume ls -q) -f
+
+
+else
+
+    echo "############### Removing Only Dito"
+    echo "############### Stopping Containers"
+    docker stop $(docker ps -a -f name=dito_ -q)
+
+    echo "############### Remove Containers"
+    docker rm $(docker ps -a -f name=dito_ -q) -f 
+
+    echo "############### Remove Images Containers"
+    docker rmi $(docker images | grep -E "dito_|redis" | awk -F' ' '{print $3}') -f
+
+    echo "############### Remove Volumes Containers"
+    docker volume rm $(docker volume ls -f driver=local -q) -f
+
+fi
+
+clear
+
+echo "############### Container ps -a"
+docker ps -a
+echo
+echo "############### Container images"
+docker images
+echo
+echo "############### Container Volume ls"
+docker volume ls

@@ -12,7 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", ":8080", "http service address")
+var addr = flag.String("addr", ":8080", "http service address.")
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -74,6 +74,8 @@ func main() {
 
 	http.HandleFunc("/ws", serveWs)
 	http.HandleFunc("/messages", serveHTTP)
+
+	log.Printf("Starting '%s' service\n", "Backend")
 	err := http.ListenAndServe(*addr, nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)

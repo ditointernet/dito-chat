@@ -12,3 +12,5 @@ README.md
 LICENSE
 .vscode
 *.exe
+*.yaml
+*.yml
