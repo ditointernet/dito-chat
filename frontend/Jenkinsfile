@@ -13,8 +13,8 @@ volumes: [
     node(labelUUID) {
 
         def DOCKER_HOST_NAME = 'registry.kubelab.info:30500'
-        def DOCKER_IMAGE_NAME = 'app01'
-        def DOCKER_IMAGE_NAME_TEST = "app01_test"      
+        def DOCKER_IMAGE_NAME = 'frontend'
+        def DOCKER_IMAGE_NAME_TEST = "frontend_test"      
 
         def dockerClean
 
@@ -37,9 +37,9 @@ volumes: [
         stage('Test') {
             container('docker') {
                 dockerClean()
-                sh ("docker run -d -p 8888:80 --name ${DOCKER_IMAGE_NAME_TEST} ${DOCKER_IMAGE_NAME}:latest")
+                sh ("docker run -d -p 8889:3000 --name ${DOCKER_IMAGE_NAME_TEST} ${DOCKER_IMAGE_NAME}:latest")
                 sh ("sleep 10")
-                sh ("docker run --network container:${DOCKER_IMAGE_NAME_TEST} appropriate/curl --retry 10 --retry-connrefused -v -I -X GET http://192.168.15.150:8888/health.html | grep '200 OK'")
+                sh ("docker run --network container:${DOCKER_IMAGE_NAME_TEST} appropriate/curl --retry 10 --retry-connrefused -v -I -X GET http://192.168.15.150:8889/health.html | grep '200 OK'")
                 dockerClean()
             }
         }
