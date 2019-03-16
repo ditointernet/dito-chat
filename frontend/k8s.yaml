@@ -1,3 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+  - protocol: TCP
+    name: http-frontend-80
+    port: 80
+    targetPort: 80
+    nodePort: 30800
+  type: NodePort
+  externalName: frontend.kubelab.info
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -5,7 +23,7 @@ metadata:
   creationTimestamp: null
   name: dito-frontend
   labels:
-    app.kubernetes.io/version: "v0.0.1"
+    app.kubernetes.io/version: "v1.0.0.$BUILD_NUMBER"
 spec:
   replicas: 1
   strategy:
@@ -21,7 +39,7 @@ spec:
         tier: frontend
     spec:
       containers:
-      - image: dito-frontend:latest
+      - image: DOCKER_HOST_NAME/dito-frontend:v1.0.0.$BUILD_NUMBER
         imagePullPolicy: Always
         name: dito-frontend
         ports:
@@ -29,5 +47,5 @@ spec:
         resources: {}
       restartPolicy: Always
       imagePullSecrets:
-        - name: dito-registry
+        - name: registry-auth
 status: {}
