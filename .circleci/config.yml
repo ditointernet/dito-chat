@@ -1,0 +1,152 @@
+version: 2.1
+jobs:
+  # Deploy backend binaries as an downloadble artifact
+  deploy_backend_artifact:
+    docker:
+      - image: circleci/golang:1.8
+        environment:
+            - ALLOWED_ORIGIN=http://localhost:3000
+            - REDIS_ADDR=redis:6379
+
+    working_directory: ~/app
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+          - v1-dependencies
+
+      - add_ssh_keys:
+          fingerprints:
+            - "ac:a0:4f:72:12:41:19:9e:2e:8c:c8:9e:cc:b3:33:31"
+
+      - run:
+          working_directory: ~/app/backend
+          name: Building go backend
+          command: |
+            go get -d .
+            go build .
+
+      - store_artifacts:
+          path: ~/app/backend/backend
+          destination: artifact-backend
+
+  # Deploy backend image at dockerhub
+  deploy_backend_image:
+    docker:
+      - image: circleci/buildpack-deps:stretch
+        environment:
+              - ALLOWED_ORIGIN=http://localhost:3000
+              - REDIS_ADDR=redis:6379
+
+    working_directory: ~/go/src/
+
+    steps:
+      - checkout
+
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+      - restore_cache:
+          keys:
+          - v1-dependencies
+
+      - add_ssh_keys:
+          fingerprints:
+            - "ac:a0:4f:72:12:41:19:9e:2e:8c:c8:9e:cc:b3:33:31"
+
+      # build and push Docker image
+      - run: |
+          TAG=latest
+          cd ~/go/src/backend && docker build -t pfrattezi/app-backend:$TAG .
+          docker login -u $DOCKER_USER -p $DOCKER_PASS
+          docker push pfrattezi/app-backend:$TAG
+
+  # Deploy frontend image at dockerhub
+  deploy_frontend_image:
+    docker:
+      - image: circleci/buildpack-deps:stretch
+
+    working_directory: ~/app
+
+    steps:
+      - checkout
+
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+      - restore_cache:
+          keys:
+          - v1-dependencies
+
+      - add_ssh_keys:
+          fingerprints:
+            - "ac:a0:4f:72:12:41:19:9e:2e:8c:c8:9e:cc:b3:33:31"
+
+      # build and push Docker image
+      - run: |
+          TAG=latest
+          cd ~/app/frontend && docker build -t pfrattezi/app-frontend:$TAG -f prod.dockerfile .
+          docker login -u $DOCKER_USER -p $DOCKER_PASS
+          docker push pfrattezi/app-frontend:$TAG
+
+  test_app:
+    docker:
+      - image: circleci/node:10
+        environment:
+              - REACT_APP_BACKEND_WS=ws://localhost:8080
+              - REACT_APP_BACKEND_URL=http://localhost:8080
+
+    working_directory: ~/app
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+          - v1-dependencies
+
+      - add_ssh_keys:
+          fingerprints:
+            - "ac:a0:4f:72:12:41:19:9e:2e:8c:c8:9e:cc:b3:33:31"
+
+      - run:
+          working_directory: ~/app/frontend
+          command: |
+            yarn
+            yarn test
+
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies
+
+workflows:
+  version: 2
+  test_and_deploy_app:
+    jobs:
+      - deploy_frontend_image:
+          requires:
+            - test_app
+          filters:
+            branches:
+              only:
+                - master
+      - test_app:
+          filters:
+            branches:
+              only:
+                - devel
+                - master
+
+      - deploy_backend_artifact:
+          filters:
+            branches:
+              only:
+                - master
+      - deploy_backend_image:
+          filters:
+            branches:
+              only:
+                - master
